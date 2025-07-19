@@ -1,0 +1,53 @@
+# --- API core ---
+fastapi
+uvicorn[standard]
+pydantic
+
+# --- DB + Migrations ---
+sqlalchemy
+asyncpg
+alembic
+
+# --- Vector DB & Retrieval ---
+qdrant-client
+faiss-cpu  # opcional dev local
+
+# --- Caching / Queue / Rate limiting ---
+redis
+
+# --- NLP / Embeddings / LLM interop ---
+sentence-transformers
+transformers
+peft
+torch
+
+# --- ML utils ---
+scikit-learn
+tqdm
+pandas
+pyarrow
+
+# --- Prompt templating / upload ---
+jinja2
+python-multipart
+
+# --- Hash / utils ---
+mmh3
+
+# --- Observabilidade ---
+prometheus-client
+
+# --- LangGraph & Orquestração ---
+langgraph
+langchain
+langchain-openai
+langchain-anthropic
+langchain-google-genai
+langchain-community
+
+# --- LangGraph & Orchestration ---
+langgraph
+langchain
+langchain-openai
+langchain-anthropic
+langchain-google-genai

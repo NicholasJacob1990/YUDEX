@@ -1,0 +1,29 @@
+apiVersion: v2
+name: harvey-backend
+description: Harvey Backend - AI-Powered Legal Document Generation System
+type: application
+version: 0.1.0
+appVersion: "1.0"
+home: https://github.com/seu-usuario/harvey-backend
+maintainers:
+  - name: Harvey Backend Team
+    email: team@harvey.ai
+keywords:
+  - ai
+  - legal
+  - document-generation
+  - langchain
+  - rag
+sources:
+  - https://github.com/seu-usuario/harvey-backend
+dependencies:
+  - name: postgresql
+    version: "12.12.10"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: postgresql.enabled
+  - name: redis
+    version: "18.4.0"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: redis.enabled
+annotations:
+  category: AI/ML

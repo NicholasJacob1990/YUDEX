@@ -1,0 +1,307 @@
+# Harvey Backend - Helm Chart Values
+# Configurações padrão para deployment em Kubernetes
+
+# -- Configurações da aplicação
+nameOverride: ""
+fullnameOverride: ""
+
+# -- Configurações da imagem Docker
+image:
+  repository: ghcr.io/seu-usuario/harvey-backend
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+# -- Configurações de réplicas e estratégia de deployment
+replicaCount: 2
+
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+
+# -- Configurações de recursos computacionais
+resources:
+  requests:
+    cpu: "500m"
+    memory: "1Gi"
+  limits:
+    cpu: "2000m"
+    memory: "4Gi"
+
+# -- Configurações de autoscaling
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+# -- Configurações de service
+service:
+  type: ClusterIP
+  port: 8000
+  targetPort: 8000
+  annotations: {}
+
+# -- Configurações de ingress
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  hosts:
+    - host: harvey-api.exemplo.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: harvey-tls
+      hosts:
+        - harvey-api.exemplo.com
+
+# -- Configurações de secrets (injetados via CI/CD)
+secrets:
+  openai_api_key: ""
+  anthropic_api_key: ""
+  google_api_key: ""
+  database_url: ""
+  redis_url: ""
+  qdrant_url: ""
+  jwt_secret: ""
+
+# -- Configurações de environment
+environment: "production"
+
+# -- Configurações de health checks
+healthcheck:
+  enabled: true
+  path: /health
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+  successThreshold: 1
+
+# -- Configurações de readiness probe
+readinessProbe:
+  enabled: true
+  path: /health
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+  successThreshold: 1
+
+# -- Configurações de startup probe
+startupProbe:
+  enabled: true
+  path: /health
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 30
+  successThreshold: 1
+
+# -- Configurações de segurança
+securityContext:
+  enabled: true
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+podSecurityContext:
+  enabled: true
+  fsGroup: 1000
+
+containerSecurityContext:
+  enabled: true
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+# -- Configurações de volumes
+volumes:
+  - name: tmp-volume
+    emptyDir: {}
+  - name: logs-volume
+    emptyDir: {}
+
+volumeMounts:
+  - name: tmp-volume
+    mountPath: /tmp
+  - name: logs-volume
+    mountPath: /app/logs
+
+# -- Configurações de service account
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# -- Configurações de network policy
+networkPolicy:
+  enabled: true
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+    - from: []
+      ports:
+        - protocol: TCP
+          port: 8000
+  egress:
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 6379
+        - protocol: TCP
+          port: 6333
+
+# -- Configurações de Pod Disruption Budget
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# -- Configurações de monitoring
+monitoring:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    namespace: ""
+    interval: 30s
+    scrapeTimeout: 10s
+    labels: {}
+    annotations: {}
+
+# -- Configurações de logging
+logging:
+  level: INFO
+  format: json
+  output: stdout
+
+# -- Configurações de métricas
+metrics:
+  enabled: true
+  path: /metrics
+  port: 8000
+
+# -- Configurações de tolerations e node affinity
+tolerations: []
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - harvey-backend
+          topologyKey: kubernetes.io/hostname
+
+nodeSelector: {}
+
+# -- Configurações de prioridade
+priorityClassName: ""
+
+# -- Configurações de lifecycle hooks
+lifecycle:
+  preStop:
+    exec:
+      command:
+        - /bin/sh
+        - -c
+        - sleep 15
+
+# -- Configurações de init containers
+initContainers:
+  - name: migrate-db
+    image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+    command:
+      - /bin/sh
+      - -c
+      - |
+        echo "Executando migrações do banco de dados..."
+        alembic upgrade head
+        echo "Migrações concluídas!"
+    env:
+      - name: DATABASE_URL
+        valueFrom:
+          secretKeyRef:
+            name: harvey-secrets
+            key: database_url
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "256Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+
+# -- Configurações de annotations para pods
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8000"
+  prometheus.io/path: "/metrics"
+
+# -- Configurações de labels para pods
+podLabels: {}
+
+# -- Configurações de timezone
+timezone: "America/Sao_Paulo"
+
+# -- Configurações de dependências externas
+postgresql:
+  enabled: false
+  # Se habilitado, usa o PostgreSQL do Bitnami
+  auth:
+    username: harvey
+    password: harvey_password
+    database: harvey_db
+  persistence:
+    enabled: true
+    size: 20Gi
+
+redis:
+  enabled: false
+  # Se habilitado, usa o Redis do Bitnami
+  auth:
+    enabled: false
+  persistence:
+    enabled: true
+    size: 5Gi
+
+# -- Configurações de backup
+backup:
+  enabled: false
+  schedule: "0 2 * * *"
+  retention: "7d"
+
+# -- Configurações de debug
+debug:
+  enabled: false
+  port: 5678

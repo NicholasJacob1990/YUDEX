@@ -1,0 +1,132 @@
+# Alertas para Harvey Backend
+
+groups:
+  - name: harvey-backend-alerts
+    rules:
+      # Disponibilidade
+      - alert: HarveyBackendDown
+        expr: up{job="harvey-backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: harvey-backend
+        annotations:
+          summary: "Harvey Backend está fora do ar"
+          description: "A API do Harvey Backend não está respondendo há {{ $for }}"
+          
+      # Performance
+      - alert: HarveyHighLatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="harvey-backend"}[5m])) > 5
+        for: 5m
+        labels:
+          severity: warning
+          service: harvey-backend
+        annotations:
+          summary: "Alta latência no Harvey Backend"
+          description: "P95 de latência está em {{ $value }}s (>5s)"
+          
+      - alert: HarveyHighThroughput
+        expr: rate(http_requests_total{job="harvey-backend"}[5m]) > 100
+        for: 5m
+        labels:
+          severity: info
+          service: harvey-backend
+        annotations:
+          summary: "Alto throughput no Harvey Backend"
+          description: "Throughput está em {{ $value }} req/s"
+          
+      # Erros
+      - alert: HarveyHighErrorRate
+        expr: rate(http_requests_total{job="harvey-backend",status=~"5.."}[5m]) / rate(http_requests_total{job="harvey-backend"}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          service: harvey-backend
+        annotations:
+          summary: "Alta taxa de erro no Harvey Backend"
+          description: "Taxa de erro está em {{ $value | humanizePercentage }} (>5%)"
+          
+      # Recursos
+      - alert: HarveyHighCPU
+        expr: rate(container_cpu_usage_seconds_total{container="harvey-backend"}[5m]) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          service: harvey-backend
+        annotations:
+          summary: "Alto uso de CPU no Harvey Backend"
+          description: "CPU está em {{ $value | humanizePercentage }} (>80%)"
+          
+      - alert: HarveyHighMemory
+        expr: container_memory_working_set_bytes{container="harvey-backend"} / container_spec_memory_limit_bytes{container="harvey-backend"} > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          service: harvey-backend
+        annotations:
+          summary: "Alto uso de memória no Harvey Backend"
+          description: "Memória está em {{ $value | humanizePercentage }} (>80%)"
+          
+      # Negócio
+      - alert: HarveyLowDocumentGeneration
+        expr: rate(documents_generated_total{job="harvey-backend"}[1h]) < 10
+        for: 15m
+        labels:
+          severity: warning
+          service: harvey-backend
+        annotations:
+          summary: "Baixa geração de documentos"
+          description: "Geração de documentos está em {{ $value }} docs/h (<10)"
+          
+      - alert: HarveyLowFeedbackScore
+        expr: rate(feedback_positive_total{job="harvey-backend"}[1h]) / rate(feedback_total{job="harvey-backend"}[1h]) < 0.7
+        for: 15m
+        labels:
+          severity: warning
+          service: harvey-backend
+        annotations:
+          summary: "Baixa pontuação de feedback"
+          description: "Feedback positivo está em {{ $value | humanizePercentage }} (<70%)"
+          
+  # Infraestrutura
+  - name: harvey-infrastructure-alerts
+    rules:
+      - alert: PostgreSQLDown
+        expr: up{job="postgres"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: postgresql
+        annotations:
+          summary: "PostgreSQL está fora do ar"
+          description: "Banco de dados PostgreSQL não está respondendo"
+          
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 1m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "Redis está fora do ar"
+          description: "Cache Redis não está respondendo"
+          
+      - alert: QdrantDown
+        expr: up{job="qdrant"} == 0
+        for: 1m
+        labels:
+          severity: warning
+          service: qdrant
+        annotations:
+          summary: "Qdrant está fora do ar"
+          description: "Banco vetorial Qdrant não está respondendo"
+          
+      - alert: HighDiskUsage
+        expr: (node_filesystem_size_bytes{mountpoint="/"} - node_filesystem_avail_bytes{mountpoint="/"}) / node_filesystem_size_bytes{mountpoint="/"} > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          service: system
+        annotations:
+          summary: "Alto uso de disco"
+          description: "Uso de disco está em {{ $value | humanizePercentage }} (>80%)"

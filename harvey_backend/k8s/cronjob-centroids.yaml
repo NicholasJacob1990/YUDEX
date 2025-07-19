@@ -1,0 +1,209 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: centroids-calculator
+  namespace: production
+  labels:
+    app: harvey-backend
+    component: centroids-calculator
+spec:
+  # Executar diariamente às 2h da manhã
+  schedule: "0 2 * * *"
+  
+  # Política de concorrência
+  concurrencyPolicy: Forbid
+  
+  # Manter apenas os últimos 3 jobs
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  
+  # Configuração do Job
+  jobTemplate:
+    spec:
+      # Timeout de 30 minutos
+      activeDeadlineSeconds: 1800
+      
+      # Política de restart
+      backoffLimit: 2
+      
+      template:
+        metadata:
+          labels:
+            app: harvey-backend
+            component: centroids-calculator
+        spec:
+          restartPolicy: Never
+          
+          # Service Account para acessar recursos
+          serviceAccountName: harvey-backend
+          
+          containers:
+          - name: centroids-calculator
+            image: harvey-backend:latest
+            imagePullPolicy: Always
+            
+            # Comando para executar o script
+            command:
+            - python3
+            - scripts/calculate_centroids.py
+            - --all
+            
+            # Variáveis de ambiente
+            env:
+            - name: ENVIRONMENT
+              value: "production"
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: harvey-backend-secrets
+                  key: redis-url
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: harvey-backend-secrets
+                  key: database-url
+            - name: QDRANT_URL
+              valueFrom:
+                secretKeyRef:
+                  name: harvey-backend-secrets
+                  key: qdrant-url
+            - name: QDRANT_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: harvey-backend-secrets
+                  key: qdrant-api-key
+            
+            # Recursos computacionais
+            resources:
+              requests:
+                memory: "512Mi"
+                cpu: "200m"
+              limits:
+                memory: "1Gi"
+                cpu: "500m"
+            
+            # Healthcheck
+            livenessProbe:
+              exec:
+                command:
+                - python3
+                - -c
+                - "import redis; redis.from_url('redis://localhost:6379').ping()"
+              initialDelaySeconds: 30
+              periodSeconds: 60
+              timeoutSeconds: 10
+              failureThreshold: 3
+          
+          # Configuração de volumes se necessário
+          volumes:
+          - name: tmp-volume
+            emptyDir: {}
+          
+          # Tolerâncias para nós específicos
+          tolerations:
+          - key: "batch-workload"
+            operator: "Equal"
+            value: "true"
+            effect: "NoSchedule"
+          
+          # Afinidade para nós com mais CPU
+          affinity:
+            nodeAffinity:
+              preferredDuringSchedulingIgnoredDuringExecution:
+              - weight: 100
+                preference:
+                  matchExpressions:
+                  - key: "node-type"
+                    operator: In
+                    values: ["compute-optimized"]
+
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: centroids-calculator-weekly
+  namespace: production
+  labels:
+    app: harvey-backend
+    component: centroids-calculator-weekly
+spec:
+  # Executar semanalmente aos domingos às 1h da manhã
+  schedule: "0 1 * * 0"
+  
+  # Política de concorrência
+  concurrencyPolicy: Forbid
+  
+  # Manter histórico
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 1
+  
+  jobTemplate:
+    spec:
+      # Timeout de 2 horas para processamento completo
+      activeDeadlineSeconds: 7200
+      
+      backoffLimit: 1
+      
+      template:
+        metadata:
+          labels:
+            app: harvey-backend
+            component: centroids-calculator-weekly
+        spec:
+          restartPolicy: Never
+          serviceAccountName: harvey-backend
+          
+          containers:
+          - name: centroids-calculator-weekly
+            image: harvey-backend:latest
+            imagePullPolicy: Always
+            
+            # Comando para recalcular todos os centroides
+            command:
+            - python3
+            - scripts/calculate_centroids.py
+            - --all
+            - --force-recalculate
+            
+            env:
+            - name: ENVIRONMENT
+              value: "production"
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: harvey-backend-secrets
+                  key: redis-url
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: harvey-backend-secrets
+                  key: database-url
+            - name: QDRANT_URL
+              valueFrom:
+                secretKeyRef:
+                  name: harvey-backend-secrets
+                  key: qdrant-url
+            - name: QDRANT_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: harvey-backend-secrets
+                  key: qdrant-api-key
+            
+            # Recursos aumentados para processamento semanal
+            resources:
+              requests:
+                memory: "1Gi"
+                cpu: "500m"
+              limits:
+                memory: "2Gi"
+                cpu: "1000m"
+            
+            # Volumes para cache temporário
+            volumeMounts:
+            - name: tmp-volume
+              mountPath: /tmp
+          
+          volumes:
+          - name: tmp-volume
+            emptyDir:
+              sizeLimit: 1Gi
